@@ -1,25 +1,29 @@
 'use client'
 
+import { Event } from '@/types/Event';
 import { format } from 'date-fns';
-import { X } from 'lucide-react';
-
-export interface CalendarEvent {
-  id: string
-  title: string
-  description: string | null
-  startTime: Date
-  endTime: Date
-  priority: 'NORMAL' | 'IMPORTANT' | 'CRITICAL'
-}
+import { X, Pencil, Trash2, Check, X as XIcon } from 'lucide-react';
+import { useState } from 'react';
 
 interface DayModalProps {
   date: Date
-  events: CalendarEvent[]
+  events: Event[]
   onClose: () => void
+  onEdit: (event: Event) => void
+  onDelete: (eventId: string) => void
+  isDeleting?: string | null
 }
 
-export function DayModal({ date, events, onClose }: DayModalProps) {
-  const getPriorityColor = (priority: string) => {
+export function DayModal({
+  date,
+  events,
+  onClose,
+  onEdit,
+  onDelete,
+  isDeleting
+}: DayModalProps) {
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+  const getPriorityColor = (priority: Event['priority']) => {
     switch (priority) {
       case 'CRITICAL': return 'bg-red-50 border-red-200 text-red-800'
       case 'IMPORTANT': return 'bg-amber-50 border-amber-200 text-amber-800'
@@ -28,11 +32,11 @@ export function DayModal({ date, events, onClose }: DayModalProps) {
   }
 
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
-      <div 
+      <div
         className="bg-white rounded-xl w-full max-w-md max-h-[90vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
@@ -47,7 +51,7 @@ export function DayModal({ date, events, onClose }: DayModalProps) {
             <X className="w-5 h-5" />
           </button>
         </div>
-        
+
         <div className="p-4 overflow-y-auto flex-1">
           {events.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
@@ -70,29 +74,71 @@ export function DayModal({ date, events, onClose }: DayModalProps) {
                     <p className="mt-2 text-sm text-gray-600">{event.description}</p>
                   )}
                   <div className="mt-3 flex justify-between items-center">
-                    <span className={`text-xs px-2 py-1 rounded-full ${
+                    <span className={`text-xs px-3 py-1 rounded-md font-medium ${
                       event.priority === 'CRITICAL'
-                        ? 'bg-red-100 text-red-800'
+                        ? 'bg-white text-red-600 shadow-sm ring-1 ring-red-200'
                         : event.priority === 'IMPORTANT'
-                        ? 'bg-amber-100 text-amber-800'
-                        : 'bg-blue-100 text-blue-800'
+                        ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200'
+                        : 'bg-white text-blue-600 shadow-sm ring-1 ring-blue-200'
                     }`}>
                       {event.priority.charAt(0) + event.priority.slice(1).toLowerCase()}
                     </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(event);
+                        }}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                        aria-label="Edit event"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      {deletingEventId === event.id ? (
+                        <div className="flex items-center gap-1 bg-red-50 rounded-full px-2 py-0.5">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDelete(event.id);
+                              setDeletingEventId(null);
+                            }}
+                            disabled={isDeleting === event.id}
+                            className="p-1 text-red-600 hover:bg-red-100 rounded-full transition-colors disabled:opacity-50"
+                            aria-label="Confirm delete"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletingEventId(null);
+                            }}
+                            disabled={isDeleting === event.id}
+                            className="p-1 text-gray-500 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-50"
+                            aria-label="Cancel delete"
+                          >
+                            <XIcon className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingEventId(event.id);
+                          }}
+                          disabled={isDeleting === event.id}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors disabled:opacity-50"
+                          aria-label="Delete event"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           )}
-        </div>
-
-        <div className="p-4 border-t flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md"
-          >
-            Close
-          </button>
         </div>
       </div>
     </div>

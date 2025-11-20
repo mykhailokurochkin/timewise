@@ -1,11 +1,12 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query';
-import { getEvents } from '@/app/actions/events.actions';
-import { format } from 'date-fns';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { getEvents, updateEvent } from '@/app/actions/events.actions';
 import { useState, useMemo, useEffect } from 'react';
 import debounce from 'lodash.debounce';
+import { format } from 'date-fns';
 import { EventCard } from './EventCard';
+import EventModal from '../../_components/EventModal';
 
 type Event = {
   id: string;
@@ -27,6 +28,53 @@ export default function EventsListView({
   searchQuery = '',
   priorityFilter = 'all'
 }: EventsListViewProps) {
+  const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  const updateEventMutation = useMutation({
+    mutationFn: async (eventData: {
+      title: string;
+      description: string;
+      startTime: string;
+      endTime: string;
+      priority: 'low' | 'medium' | 'high';
+    }) => {
+      if (!editingEvent) return;
+
+      const formData = new FormData();
+      formData.append('title', eventData.title);
+      formData.append('description', eventData.description);
+      formData.append('startTime', eventData.startTime);
+      formData.append('endTime', eventData.endTime);
+      formData.append('priority',
+        eventData.priority === 'low' ? 'NORMAL' :
+          eventData.priority === 'high' ? 'CRITICAL' : 'IMPORTANT'
+      );
+
+      return updateEvent(editingEvent.id, formData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+      setIsModalOpen(false);
+      setEditingEvent(null);
+    },
+  });
+
+  const handleEditEvent = (event: Event) => {
+    setEditingEvent(event);
+    setIsModalOpen(true);
+  };
+
+  const handleSubmitEdit = (eventData: {
+    title: string;
+    description: string;
+    startTime: string;
+    endTime: string;
+    priority: 'low' | 'medium' | 'high';
+  }) => {
+    updateEventMutation.mutate(eventData);
+  };
   const { data: events = [], isLoading } = useQuery({
     queryKey: ['events'],
     queryFn: async () => {
@@ -102,10 +150,37 @@ export default function EventsListView({
   }
 
   return (
-    <div className="space-y-4">
-      {filteredEvents.map((event) => (
-        <EventCard key={event.id} event={event} />
-      ))}
-    </div>
+    <>
+      <div className="space-y-4">
+        {filteredEvents.map((event) => (
+          <EventCard
+            key={event.id}
+            event={event}
+            onEdit={handleEditEvent}
+          />
+        ))}
+      </div>
+
+      {editingEvent && (
+        <EventModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingEvent(null);
+          }}
+          onSubmit={handleSubmitEdit}
+          isLoading={updateEventMutation.isPending}
+          selectedDate={new Date(editingEvent.startTime)}
+          initialData={{
+            title: editingEvent.title,
+            description: editingEvent.description || '',
+            startTime: format(editingEvent.startTime, "yyyy-MM-dd'T'HH:mm"),
+            endTime: format(editingEvent.endTime, "yyyy-MM-dd'T'HH:mm"),
+            priority: editingEvent.priority === 'CRITICAL' ? 'high' :
+              editingEvent.priority === 'IMPORTANT' ? 'medium' : 'low'
+          }}
+        />
+      )}
+    </>
   );
 }

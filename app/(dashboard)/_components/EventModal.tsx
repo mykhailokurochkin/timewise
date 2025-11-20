@@ -1,45 +1,107 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { FiX } from 'react-icons/fi'
+
+export type EventFormData = {
+  title: string
+  description: string
+  startTime: string
+  endTime: string
+  priority: 'low' | 'medium' | 'high'
+}
 
 type EventModalProps = {
   isOpen: boolean
   onClose: () => void
   isLoading?: boolean
-  onSubmit: (eventData: {
-    title: string
-    description: string
-    startTime: string
-    endTime: string
-    priority: 'low' | 'medium' | 'high'
-  }) => void
+  onSubmit: (eventData: EventFormData) => void
+  initialData?: EventFormData
+  selectedDate: Date | null
 }
 
-export default function EventModal({ isOpen, onClose, onSubmit, isLoading = false }: EventModalProps) {
+export default function EventModal({ 
+  isOpen, 
+  onClose, 
+  onSubmit, 
+  isLoading = false, 
+  initialData 
+}: EventModalProps) {
   type Priority = 'low' | 'medium' | 'high'
 
-  const [formData, setFormData] = useState<{
-    title: string
-    description: string
-    startTime: string
-    endTime: string
-    priority: Priority
-  }>({
-    title: '',
-    description: '',
-    startTime: '',
-    endTime: '',
-    priority: 'medium',
-  })
+  const formatTimeFromISO = (isoString: string) => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    return date.toTimeString().slice(0, 5);
+  };
+
+  const getDefaultTimes = () => {
+    const now = new Date();
+    const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+    return {
+      start: now.toTimeString().slice(0, 5),
+      end: oneHourLater.toTimeString().slice(0, 5)
+    };
+  };
+
+  const [time, setTime] = useState({
+    start: initialData ? formatTimeFromISO(initialData.startTime) : getDefaultTimes().start,
+    end: initialData ? formatTimeFromISO(initialData.endTime) : getDefaultTimes().end
+  });
+
+  const [formData, setFormData] = useState<EventFormData>(
+    initialData || {
+      title: '',
+      description: '',
+      startTime: '',
+      endTime: '',
+      priority: 'medium',
+    }
+  )
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    
+    const baseDate = new Date();
+    
+    const [startHours, startMinutes] = time.start.split(':').map(Number);
+    const startDateTime = new Date(baseDate);
+    startDateTime.setHours(startHours, startMinutes, 0, 0);
+    
+    const [endHours, endMinutes] = time.end.split(':').map(Number);
+    const endDateTime = new Date(baseDate);
+    endDateTime.setHours(endHours, endMinutes, 0, 0);
+    
+    if (endDateTime <= startDateTime) {
+      endDateTime.setDate(endDateTime.getDate() + 1);
+    }
+    
     onSubmit({
       ...formData,
+      startTime: startDateTime.toISOString(),
+      endTime: endDateTime.toISOString(),
       priority: formData.priority as 'low' | 'medium' | 'high'
     })
   }
+
+  useEffect(() => {
+    if (initialData) {
+      setFormData(initialData);
+      setTime({
+        start: formatTimeFromISO(initialData.startTime),
+        end: formatTimeFromISO(initialData.endTime)
+      });
+    } else {
+      setFormData({
+        title: '',
+        description: '',
+        startTime: '',
+        endTime: '',
+        priority: 'medium',
+      });
+      setTime(getDefaultTimes());
+    }
+  }, [initialData, isOpen]);
 
   if (!isOpen) return null
 
@@ -47,7 +109,9 @@ export default function EventModal({ isOpen, onClose, onSubmit, isLoading = fals
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl w-full max-w-md">
         <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-lg font-semibold">Create New Event</h2>
+          <h2 className="text-lg font-semibold">
+            {initialData ? 'Edit Event' : 'Create New Event'}
+          </h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <FiX className="h-5 w-5" />
           </button>
@@ -89,11 +153,16 @@ export default function EventModal({ isOpen, onClose, onSubmit, isLoading = fals
                 Start Time *
               </label>
               <input
-                type="datetime-local"
+                type="time"
                 id="startTime"
                 required
-                value={formData.startTime}
-                onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                value={time.start}
+                onChange={(e) => {
+                  setTime(prev => ({
+                    ...prev,
+                    start: e.target.value
+                  }));
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
@@ -103,11 +172,17 @@ export default function EventModal({ isOpen, onClose, onSubmit, isLoading = fals
                 End Time *
               </label>
               <input
-                type="datetime-local"
+                type="time"
                 id="endTime"
                 required
-                value={formData.endTime}
-                onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                min={time.start}
+                value={time.end}
+                onChange={(e) => {
+                  setTime(prev => ({
+                    ...prev,
+                    end: e.target.value
+                  }));
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
@@ -143,11 +218,13 @@ export default function EventModal({ isOpen, onClose, onSubmit, isLoading = fals
             <button
               type="submit"
               disabled={isLoading}
-              className={`px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
-                isLoading ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'
-              }`}
+              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? 'Creating...' : 'Create Event'}
+              {isLoading 
+                ? 'Saving...' 
+                : initialData 
+                  ? 'Save Changes' 
+                  : 'Create Event'}
             </button>
           </div>
         </form>

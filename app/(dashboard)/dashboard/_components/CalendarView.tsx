@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query'
-import { getEvents } from '@/app/actions/events.actions'
+import { useState, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getEvents, updateEvent, deleteEvent } from '@/app/actions/events.actions';
 import { DayModal } from './DayModal';
+import EventModal from '../../_components/EventModal';
+import { Event } from '@/types/Event';
 import {
   format,
   startOfMonth,
@@ -21,43 +23,92 @@ import {
 import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { clsx } from 'clsx';
 
-type ApiEvent = {
-  id: string;
-  title: string;
-  description: string | null;
-  startTime: string;
-  endTime: string;
-  priority: 'NORMAL' | 'IMPORTANT' | 'CRITICAL';
-  createdAt: string;
-  updatedAt: string;
-  userId: string;
-};
-
-type Event = Omit<ApiEvent, 'startTime' | 'endTime' | 'createdAt' | 'updatedAt'> & {
-  startTime: Date;
-  endTime: Date;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
 export default function CalendarView() {
+  const queryClient = useQueryClient();
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [showDayModal, setShowDayModal] = useState(false);
-  
-  const { data: events = [], isLoading } = useQuery<Event[]>({
+  const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+
+  const { data: events = [] } = useQuery<Event[]>({
     queryKey: ['events'],
     queryFn: async () => {
-      const data = await getEvents();
-      return data.map(event => ({
-        ...event,
-        startTime: new Date(event.startTime),
-        endTime: new Date(event.endTime),
-        createdAt: new Date(event.createdAt),
-        updatedAt: new Date(event.updatedAt),
-      }));
+      try {
+        const data = await getEvents();
+        return data.map(event => ({
+          ...event,
+          startTime: new Date(event.startTime),
+          endTime: new Date(event.endTime),
+          createdAt: new Date(event.createdAt),
+          updatedAt: new Date(event.updatedAt),
+        }));
+      } catch (err) {
+        console.error('Failed to fetch events:', err);
+        throw new Error('Failed to load events');
+      }
     },
   });
+
+  const updateEventMutation = useMutation({
+    mutationFn: async (eventData: {
+      id: string;
+      title: string;
+      description: string;
+      startTime: string;
+      endTime: string;
+      priority: 'low' | 'medium' | 'high';
+    }) => {
+      if (!editingEvent) return;
+
+      const formData = new FormData();
+      formData.append('title', eventData.title);
+      formData.append('description', eventData.description);
+      formData.append('startTime', eventData.startTime);
+      formData.append('endTime', eventData.endTime);
+      formData.append('priority',
+        eventData.priority === 'low' ? 'NORMAL' :
+          eventData.priority === 'high' ? 'CRITICAL' : 'IMPORTANT'
+      );
+
+      return updateEvent(editingEvent.id, formData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+      setIsEditModalOpen(false);
+      setEditingEvent(null);
+    },
+  });
+
+  const deleteEventMutation = useMutation({
+    mutationFn: (eventId: string) => deleteEvent(eventId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+      setDeletingEventId(null);
+    },
+  });
+
+  const handleEditEvent = (event: Event) => {
+    setEditingEvent(event);
+    setIsEditModalOpen(true);
+  };
+
+  const handleDeleteEvent = (eventId: string) => {
+    setDeletingEventId(eventId);
+    deleteEventMutation.mutate(eventId);
+  };
+
+  const handleSubmitEdit = (eventData: {
+    title: string;
+    description: string;
+    startTime: string;
+    endTime: string;
+    priority: 'low' | 'medium' | 'high';
+  }) => {
+    if (!editingEvent) return;
+    updateEventMutation.mutate({ ...eventData, id: editingEvent.id });
+  };
 
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
   const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
@@ -74,7 +125,7 @@ export default function CalendarView() {
   });
 
   const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  
+
   const getEventsForDay = (day: Date) => {
     return events.filter(event => isSameDay(event.startTime, day))
   }
@@ -83,7 +134,7 @@ export default function CalendarView() {
     setSelectedDate(day)
     setShowDayModal(true)
   };
-  
+
   const getPriorityColor = (priority: string, type: 'bg' | 'text' | 'border' = 'bg') => {
     const colors = {
       CRITICAL: {
@@ -108,7 +159,7 @@ export default function CalendarView() {
         dot: 'bg-blue-500',
       },
     };
-    
+
     const selected = colors[priority as keyof typeof colors] || colors.NORMAL;
     return selected[type as keyof typeof selected] || '';
   };
@@ -182,7 +233,7 @@ export default function CalendarView() {
 
               <div className="mt-0.5 space-y-1 flex-1 overflow-y-auto max-h-[calc(100%-28px)] pr-0.5">
                 {getEventsForDay(day).slice(0, 4).map((event: Event) => (
-                  <div 
+                  <div
                     key={event.id}
                     className={clsx(
                       'text-[11px] p-1.5 rounded transition-all duration-150 cursor-pointer',
@@ -227,8 +278,34 @@ export default function CalendarView() {
       {showDayModal && selectedDate && (
         <DayModal
           date={selectedDate}
-          events={getEventsForDay(selectedDate)}
+          events={events.filter(event => isSameDay(event.startTime, selectedDate))}
           onClose={() => setShowDayModal(false)}
+          onEdit={handleEditEvent}
+          onDelete={handleDeleteEvent}
+          isDeleting={deletingEventId}
+        />
+      )}
+      
+      {isEditModalOpen && editingEvent && (
+        <EventModal
+          isOpen={isEditModalOpen}
+          onClose={() => {
+            setIsEditModalOpen(false);
+            setEditingEvent(null);
+          }}
+          onSubmit={handleSubmitEdit}
+          initialData={{
+            title: editingEvent.title,
+            description: editingEvent.description || '',
+            startTime: editingEvent.startTime.toISOString(),
+            endTime: editingEvent.endTime.toISOString(),
+            priority: (
+              editingEvent.priority === 'CRITICAL' ? 'high' :
+              editingEvent.priority === 'IMPORTANT' ? 'medium' : 'low'
+            ) as 'low' | 'medium' | 'high'
+          }}
+          selectedDate={selectedDate}
+          isLoading={updateEventMutation.isPending}
         />
       )}
     </div>
