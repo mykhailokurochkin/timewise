@@ -27,7 +27,7 @@ TimeWise is a modern, intuitive event scheduling application built with Next.js,
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/yourusername/timewise.git
+   git clone https://github.com/mykhailokurochkin/timewise.git
    cd timewise
    ```
 
@@ -85,3 +85,5 @@ TimeWise is a modern, intuitive event scheduling application built with Next.js,
 - [date-fns](https://date-fns.org/) - Date utilities
 - [React Query](https://tanstack.com/query) - Data fetching
 - [NextAuth.js](https://next-auth.js.org/) - Authentication
+
+Made by Mykhailo Kurochkin
