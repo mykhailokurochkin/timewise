@@ -1,20 +1,50 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FiCalendar, FiList, FiSearch, FiFilter } from 'react-icons/fi';
+import { FiCalendar, FiList, FiSearch, FiFilter, FiX } from 'react-icons/fi';
+import { useState, useEffect, useMemo } from 'react';
 import CalendarView from './_components/CalendarView';
 import EventsListView from './_components/EventsListView';
 
+type PriorityFilter = 'all' | 'NORMAL' | 'IMPORTANT' | 'CRITICAL';
+
 export default function DashboardPage() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const view = searchParams.get('view') || 'calendar'
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const view = searchParams.get('view') || 'calendar';
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchQuery]);
 
   const updateView = (newView: string) => {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('view', newView)
-    router.push(`?${params.toString()}`)
-  }
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('view', newView);
+    router.push(`?${params.toString()}`);
+  };
+
+  useEffect(() => {
+    if ((debouncedSearchQuery || priorityFilter !== 'all') && view !== 'list') {
+      updateView('list');
+    }
+  }, [debouncedSearchQuery, priorityFilter, view]);
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setDebouncedSearchQuery('');
+    setPriorityFilter('all');
+  };
+
+  const hasFilters = priorityFilter !== 'all';
 
   return (
     <div className="h-full flex flex-col">
@@ -22,7 +52,7 @@ export default function DashboardPage() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Your Events</h1>
-            <p className="text-sm text-gray-500 mt-1">Manage and track your schedule</p>
+            <p className="text-sm text-gray-500 mt-1">Manage your schedule</p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -41,7 +71,7 @@ export default function DashboardPage() {
                   }`}
               >
                 <FiList className="w-4 h-4" />
-                <span className="hidden sm:inline">List</span>
+                <span className="hidden sm:inline">Список</span>
               </button>
             </div>
           </div>
@@ -53,22 +83,46 @@ export default function DashboardPage() {
             <input
               type="text"
               placeholder="Search events..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <FiX className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
             <div className="relative">
-              <select className="appearance-none bg-white border border-gray-300 text-gray-700 py-2 pl-4 pr-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer">
-                <option>All Priorities</option>
-                <option>Critical</option>
-                <option>Important</option>
-                <option>Normal</option>
+              <select
+                value={priorityFilter}
+                onChange={(e) => setPriorityFilter(e.target.value as PriorityFilter)}
+                className="appearance-none bg-white border border-gray-300 text-gray-700 py-2 pl-4 pr-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer"
+              >
+                <option value="all">All Priorities</option>
+                <option value="CRITICAL">Critical</option>
+                <option value="IMPORTANT">Important</option>
+                <option value="NORMAL">Normal</option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
                 <FiFilter className="w-4 h-4" />
               </div>
             </div>
+
+            {hasFilters && (
+              <button
+                onClick={clearFilters}
+                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1"
+              >
+                <FiX className="w-4 h-4" />
+                <span>Clear filters</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -78,10 +132,13 @@ export default function DashboardPage() {
           <CalendarView />
         ) : (
           <div className="max-w-4xl mx-auto">
-            <EventsListView />
+            <EventsListView
+              searchQuery={debouncedSearchQuery}
+              priorityFilter={priorityFilter}
+            />
           </div>
         )}
       </div>
     </div>
-  )
+  );
 }

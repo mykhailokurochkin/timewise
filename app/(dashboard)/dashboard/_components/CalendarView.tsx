@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react';
-import { useQuery, QueryFunction } from '@tanstack/react-query';
-import { getEvents } from '@/app/actions/events.actions';
+import { useQuery } from '@tanstack/react-query'
+import { getEvents } from '@/app/actions/events.actions'
+import { DayModal } from './DayModal';
 import {
   format,
   startOfMonth,
@@ -40,7 +41,9 @@ type Event = Omit<ApiEvent, 'startTime' | 'endTime' | 'createdAt' | 'updatedAt'>
 };
 
 export default function CalendarView() {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(new Date())
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [showDayModal, setShowDayModal] = useState(false);
   
   const { data: events = [], isLoading } = useQuery<Event[]>({
     queryKey: ['events'],
@@ -73,8 +76,12 @@ export default function CalendarView() {
   const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   
   const getEventsForDay = (day: Date) => {
-    if (!events) return [];
-    return events.filter((event: Event) => isSameDay(event.startTime, day));
+    return events.filter(event => isSameDay(event.startTime, day))
+  }
+
+  const handleDayClick = (day: Date) => {
+    setSelectedDate(day)
+    setShowDayModal(true)
   };
   
   const getPriorityColor = (priority: string, type: 'bg' | 'text' | 'border' = 'bg') => {
@@ -109,13 +116,18 @@ export default function CalendarView() {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-full overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-900">
-          {format(currentDate, 'MMMM yyyy')}
-        </h2>
+        <div className="flex flex-col">
+          <h2 className="text-lg font-semibold text-gray-900">
+            {format(currentDate, 'MMMM yyyy')}
+          </h2>
+          <div className="text-sm text-gray-500">
+            Today is {format(new Date(), 'EEEE, MMMM d')}
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={goToToday}
-            className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors mr-2"
+            className="px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors border border-indigo-100 hover:border-indigo-200 mr-2"
           >
             Today
           </button>
@@ -134,20 +146,23 @@ export default function CalendarView() {
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-7 auto-rows-fr bg-gray-200 gap-px border-b border-gray-200">
+      <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
         {weekDays.map((day) => (
-          <div key={day} className="bg-gray-50 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+          <div key={day} className="text-sm font-semibold text-center text-gray-600 py-1.5">
             {day}
           </div>
         ))}
+      </div>
 
+      <div className="flex-1 grid grid-cols-7 auto-rows-fr bg-gray-200 gap-px">
         {days.map((day, dayIdx) => {
           const isCurrentMonth = isSameMonth(day, monthStart)
           return (
             <div
               key={day.toString()}
+              onClick={() => handleDayClick(day)}
               className={clsx(
-                "bg-white min-h-[100px] p-1.5 relative transition-colors hover:bg-gray-50 flex flex-col",
+                "bg-white min-h-[100px] p-1.5 relative transition-colors flex flex-col cursor-pointer hover:bg-gray-50",
                 !isCurrentMonth && 'bg-gray-50/50 text-gray-400',
                 isToday(day) && 'bg-blue-50/50'
               )}
@@ -155,10 +170,10 @@ export default function CalendarView() {
               <div className="flex justify-between items-start">
                 <span
                   className={clsx(
-                    'text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full',
+                    'text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full',
                     isToday(day)
                       ? 'bg-indigo-600 text-white'
-                      : isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
+                      : isCurrentMonth ? 'text-gray-900' : 'text-gray-500'
                   )}
                 >
                   {format(day, 'd')}
@@ -208,6 +223,14 @@ export default function CalendarView() {
           )
         })}
       </div>
+
+      {showDayModal && selectedDate && (
+        <DayModal
+          date={selectedDate}
+          events={getEventsForDay(selectedDate)}
+          onClose={() => setShowDayModal(false)}
+        />
+      )}
     </div>
   )
 }
